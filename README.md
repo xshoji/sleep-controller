@@ -78,6 +78,28 @@ To uninstall, allow sleep, quit the app, and delete `build/SleepController.app`.
 
 Development and verification details are in [AGENTS.md](AGENTS.md).
 
+## Other
+
+<details>
+<summary>Release process</summary>
+
+The release flow for this repository is automated with GitHub Actions.
+Pushing Git tags triggers the release job.
+
+```bash
+# Release
+git tag 0.0.1 && git push --tags
+
+# Delete tag
+v="0.0.1"; git tag -d "${v}" && git push origin :"${v}"
+
+# Delete tag and recreate new tag and push
+v="0.0.1"; git tag -d "${v}" && git push origin :"${v}"; git tag "${v}"; git push --tags
+```
+
+</details>
+
+
 ## License
 
 [MIT](LICENSE).
