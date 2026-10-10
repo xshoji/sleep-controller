@@ -13,8 +13,6 @@ Requires macOS 13 or later and Apple's Command Line Tools (`xcode-select --insta
 open build/SleepController.app
 ```
 
-No Xcode project, Apple ID, or paid developer membership is required.
-
 ### About code signing & Gatekeeper
 
 Local builds and GitHub Releases use ad-hoc signing, not Developer ID signing, and are not notarized by Apple. Gatekeeper may block a downloaded app from opening.
@@ -37,7 +35,7 @@ Choose **Prevent Sleep & Keep Display On** to also prevent idle display sleep. C
 
 Keep Display On applies only while this app is running and starts disabled at launch. It is released when you allow sleep, quit the app, or the app detects that another app allowed sleep. It does not turn on an already sleeping display, keep a closed lid's display lit, or unlock the screen. Automatic lock prevention depends on the macOS version and screen saver/lock settings; it is not guaranteed. Manual and organization-enforced locks are not prevented.
 
-The icon shows **Zzz** when sleep is allowed, **Zzz with a prohibition mark** when sleep is prevented, and a **question mark** when the state is unknown. Menu checkmarks and the tooltip also show the current state. The app version appears above **Quit SleepController**.
+The icon shows **Zzz** when sleep is allowed, **Zzz with a prohibition mark** when sleep is prevented, and a **question mark** when the state is unknown. Menu checkmarks and the tooltip also show the current state.
 
 When quitting while sleep is prevented or the state is unknown, choose **Allow Sleep and Quit**, **Cancel**, or **Quit Without Changes**. Cancelling authentication leaves the setting unchanged.
 
