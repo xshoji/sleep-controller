@@ -35,9 +35,12 @@ The previous README listed macOS 26.7.1 / Apple M5 / Swift 6.4 as its verificati
 - Read state with `pmset -g` at startup, when the menu opens, after operations, and every 15 seconds.
 - Require the `System-wide power settings:` and `Currently in use:` headers. A single `SleepDisabled 1` means ON; `0` means OFF. A missing key in otherwise valid output means OFF, matching Apple's default. Failed reads, duplicate keys, invalid values, and malformed output mean unknown.
 - Read back after a successful change. Report an error if the requested state is not observed. Authentication cancellation is silent and triggers a refresh; normal ON/OFF operations have no confirmation or success dialogs.
+- Every user-requested mode change runs the administrator command, even when `SleepDisabled` already matches. Switching between normal ON and Keep Display On must not bypass authentication. AppleScript may reuse authorization as described below.
 - Do not automatically restore the startup setting: another app may have changed it. Apps using the same setting cannot distinguish ownership. OFF clears their setting too, but not separate assertions such as `caffeinate`.
 - When quitting while ON or unknown, offer OFF and quit, cancel, or quit with the setting unchanged. Failed OFF authentication or readback prevents quitting. Forced termination may bypass this prompt.
 - Never assume that setting readback proves lid-closed operation. `disablesleep` is not fully documented in the public macOS manual, and behavior may vary by hardware and OS.
+- Keep Display On holds a `ProcessInfo.beginActivity` token with `.idleDisplaySleepDisabled`, separately from the system-wide setting. Enable it only after ON succeeds; release it on normal ON, successful OFF, observed external OFF, or termination. Failed authentication/readback preserves the display mode unless OFF is observed. It starts disabled at launch, uses no child process or extra administrator command, and does not alter display timeouts or lock settings.
+- A held token indicates a requested display assertion, not proof of display or automatic lock behavior. Do not promise prevention of screen savers, manual locks, or managed locks.
 
 ## Administrator authentication
 
@@ -85,6 +88,8 @@ These steps change system power settings and require administrator authenticatio
 4. Close the lid for about two minutes, reopen it, and inspect `tail -n 80 /tmp/sleepcontroller-heartbeat.log` in another terminal. Continuous entries roughly two seconds apart indicate that the process kept running under those conditions; a gap matching the closed-lid interval indicates failure. Test AC and battery power separately.
 5. Turn OFF and repeat with no other sleep-prevention apps or clamshell conditions. Confirm that entries pause. Stop the heartbeat with Control-C and delete its log.
 6. While the app is running, change `sudo pmset -a disablesleep 1` and `0` in Terminal. Check that the menu follows when reopened or within 15 seconds. Exercise each quit option while ON, then restore OFF.
+7. Select **Prevent Sleep & Keep Display On** and check `pmset -g assertions` for a `PreventUserIdleDisplaySleep` assertion named `SleepController Keep Display On`. Switch to **Prevent Sleep** and confirm that this assertion disappears while `SleepDisabled` stays `1`. Confirm that switching in either direction requests administrator authentication and that cancellation preserves the original mode. Repeat strong ON followed by OFF, and external OFF followed by a refresh. Check that cancelling OFF authentication preserves strong ON.
+8. With strong ON active and the lid open, leave the Mac untouched longer than its configured display sleep and screen saver delays. Check display sleep, screen saver activation, and automatic lock separately on AC and battery power. Confirm that manual lock still works. Quit with **Quit Without Changes**: the display assertion must disappear while `SleepDisabled` stays `1`. Relaunch and confirm normal ON, then restore OFF. Test forced termination separately to check assertion cleanup.
 
 Use `pmset -g log` Sleep/Wake records as supporting evidence. Setting readback alone does not verify lid-closed behavior or protect against battery depletion, thermal protection, network failures, service limits, or process termination.
 

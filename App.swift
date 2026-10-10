@@ -15,6 +15,11 @@ private let touchIDConfig = "/etc/pam.d/sudo_local"
 private let refreshInterval: TimeInterval = 15
 private let userCancelled = -128
 
+private enum DisplayMode {
+    case normal
+    case keepOn
+}
+
 private func statusImage(_ setting: SleepSetting) -> NSImage {
     if setting == .unknown {
         return NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Sleep status unknown")!
@@ -158,10 +163,12 @@ private func runAdmin(_ arguments: [String]) -> AdminResult {
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let onItem = NSMenuItem(title: "Prevent Sleep", action: #selector(turnOn), keyEquivalent: "")
+    private let displayItem = NSMenuItem(title: "Prevent Sleep & Keep Display On", action: #selector(keepDisplayOn), keyEquivalent: "")
     private let offItem = NSMenuItem(title: "Allow Sleep (Default)", action: #selector(turnOff), keyEquivalent: "")
     private var setting = SleepSetting.unknown
     private var busy = false
     private var timer: Timer?
+    private var displayActivity: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -170,7 +177,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         menu.autoenablesItems = false
         menu.delegate = self
 
-        for item in [onItem, offItem] {
+        for item in [displayItem, onItem, offItem] {
             item.target = self
             menu.addItem(item)
         }
@@ -202,16 +209,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     @objc private func refresh() {
         guard !busy else { return }
         setting = readSetting()
+        // An external OFF must also release our separate display assertion.
+        if setting == .off { endDisplayActivity() }
         render()
     }
 
     private func render() {
-        onItem.isEnabled = !busy && setting != .on
+        let displayOn = displayActivity != nil
+        onItem.isEnabled = !busy && (setting != .on || displayOn)
+        displayItem.isEnabled = !busy && (setting != .on || !displayOn)
         offItem.isEnabled = !busy && setting != .off
-        onItem.state = setting == .on ? .on : .off
+        onItem.state = setting == .on && !displayOn ? .on : .off
+        displayItem.state = setting == .on && displayOn ? .on : .off
         offItem.state = setting == .off ? .on : .off
         statusItem.button?.image = statusImage(setting)
-        statusItem.button?.toolTip = busy ? "Updating sleep setting…" : setting.rawValue
+        let detail = displayOn ? "\(setting.rawValue) — Keep Display On" : setting.rawValue
+        statusItem.button?.toolTip = busy ? "Updating sleep setting…" : detail
     }
 
     private func alert(_ title: String, _ detail: String) {
@@ -226,15 +239,40 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         _ = change(.on)
     }
 
+    @objc private func keepDisplayOn() {
+        _ = change(.on, display: .keepOn)
+    }
+
     @objc private func turnOff() {
         _ = change(.off)
     }
 
-    private func change(_ requested: SleepSetting) -> Bool {
+    private func change(_ requested: SleepSetting, display: DisplayMode = .normal) -> Bool {
+        // Keep the current display mode if authentication or readback fails.
+        guard changeSetting(requested) else { return false }
+        if requested == .on && display == .keepOn {
+            if displayActivity == nil {
+                displayActivity = ProcessInfo.processInfo.beginActivity(
+                    options: [.idleDisplaySleepDisabled], reason: "SleepController Keep Display On")
+            }
+        } else {
+            endDisplayActivity()
+        }
+        render()
+        return true
+    }
+
+    private func endDisplayActivity() {
+        guard let activity = displayActivity else { return }
+        ProcessInfo.processInfo.endActivity(activity)
+        displayActivity = nil
+    }
+
+    private func changeSetting(_ requested: SleepSetting) -> Bool {
         guard !busy, requested != .unknown else { return false }
         refresh()
-        guard setting != requested else { return true }
 
+        // Authenticate display-only mode changes too, even when pmset already matches.
         busy = true
         render()
         NSApp.activate(ignoringOtherApps: true)
@@ -279,6 +317,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         NSApp.terminate(nil)
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        endDisplayActivity()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !busy else { return .terminateCancel }
         refresh()
@@ -287,7 +329,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         NSApp.activate(ignoringOtherApps: true)
         let warning = NSAlert()
         warning.messageText = "Quit without allowing sleep?"
-        warning.informativeText = "Current status: \(setting.rawValue)\nQuitting does not restore sleep. Allowing sleep also clears this setting if another app enabled it. An unknown status may mean sleep is still prevented."
+        warning.informativeText = "Current status: \(setting.rawValue)\nQuitting does not restore the system-wide sleep setting, but always releases Keep Display On. Allowing sleep also clears this setting if another app enabled it. An unknown status may mean sleep is still prevented."
         warning.addButton(withTitle: "Allow Sleep and Quit")
         warning.addButton(withTitle: "Cancel")
         warning.addButton(withTitle: "Quit Without Changes")
