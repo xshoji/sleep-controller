@@ -2,6 +2,10 @@
 
 A small macOS menu bar app for keeping local processes running with your MacBook's lid closed.
 
+SleepController is a simple Swift app focused on manual sleep prevention. It needs no external libraries, persistent privileged helper, or sudoers changes. It uses Touch ID when configured for sudo, and password authentication is also available through the macOS authentication dialog.
+
+To keep the implementation simple, it does not include convenience features such as timers or automatic deactivation when the battery is low.
+
 It changes the system-wide sleep setting. Lid-closed behavior may vary by Mac model and macOS version; verify it on your Mac before relying on it.
 
 ## Get started
